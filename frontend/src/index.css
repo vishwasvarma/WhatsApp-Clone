@@ -11,15 +11,25 @@
     "Segoe UI",
     sans-serif;
   color: #111827;
-  background: #f3f4f6;
+  background: #e9ecef;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: linear-gradient(135deg, #eef2f5 0%, #f8fafc 100%);
 }
 
 * {
   box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
 }
