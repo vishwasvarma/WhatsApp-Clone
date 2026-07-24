@@ -11,7 +11,12 @@ import {
 } from "react-icons/fi";
 
 const contacts = [
-  { name: "Ravi Teja", last: "Hey, are you free today?", unread: 3, active: true },
+  {
+    name: "Ravi Teja",
+    last: "Hey, are you free today?",
+    unread: 3,
+    active: true,
+  },
   { name: "Ankur Pranav", last: "Sure, let's do it", unread: 0, active: false },
   { name: "Mira Sharma", last: "Typing...", unread: 0, active: false },
   { name: "Group Chat", last: "Meeting at 4 PM", unread: 5, active: false },
@@ -24,7 +29,9 @@ function ChatPage() {
         <aside className="hidden w-[360px] flex-col border-r border-slate-800 bg-slate-950 lg:flex">
           <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">WhatsApp</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                WhatsApp
+              </p>
               <h1 className="mt-2 text-2xl font-semibold text-white">Chat</h1>
             </div>
             <Link
@@ -46,9 +53,15 @@ function ChatPage() {
           </div>
 
           <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-3 text-sm text-slate-400">
-            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2 text-slate-100">All</span>
-            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2">Unread</span>
-            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2">Groups</span>
+            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2 text-slate-100">
+              All
+            </span>
+            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2">
+              Unread
+            </span>
+            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2">
+              Groups
+            </span>
           </div>
 
           <div className="flex-1 overflow-y-auto px-3 py-4">
@@ -60,18 +73,25 @@ function ChatPage() {
                 }`}
               >
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-sm font-semibold text-white">
-                  {contact.name.split(" ").map((part) => part[0]).join("")}
+                  {contact.name
+                    .split(" ")
+                    .map((part) => part[0])
+                    .join("")}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-semibold text-white">{contact.name}</p>
+                    <p className="truncate text-sm font-semibold text-white">
+                      {contact.name}
+                    </p>
                     {contact.unread > 0 ? (
                       <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-semibold text-slate-950">
                         {contact.unread}
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 truncate text-sm text-slate-400">{contact.last}</p>
+                  <p className="mt-1 truncate text-sm text-slate-400">
+                    {contact.last}
+                  </p>
                 </div>
               </button>
             ))}
@@ -81,7 +101,9 @@ function ChatPage() {
             <p className="font-medium text-slate-300">Recent</p>
             <div className="mt-3 grid gap-3">
               <button className="flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3 text-left text-sm transition hover:bg-slate-800">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-slate-300">+</span>
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-slate-300">
+                  +
+                </span>
                 <div>
                   <p className="font-semibold text-white">New group</p>
                   <p className="text-slate-500">Create a new community</p>
