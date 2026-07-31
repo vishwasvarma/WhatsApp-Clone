@@ -10,15 +10,16 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  color: #111827;
-  background: #e9ecef;
+  color: #e6eef3;
+  background: #0b1116;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: linear-gradient(135deg, #eef2f5 0%, #f8fafc 100%);
+  background: linear-gradient(180deg, #071018 0%, #0b1116 100%);
+  color: #e6eef3;
 }
 
 * {
@@ -30,6 +31,6 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #1f2937;
   border-radius: 999px;
 }
