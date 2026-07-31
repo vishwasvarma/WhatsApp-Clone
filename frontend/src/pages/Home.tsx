@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import {
   FiBell,
   FiBookmark,
-  FiCalendar,
   FiCamera,
   FiMessageSquare,
   FiSettings,
@@ -28,12 +27,7 @@ const features = [
     icon: FiBookmark,
     description: "Pinned highlights",
   },
-  {
-    to: "/schedule",
-    label: "Schedule",
-    icon: FiCalendar,
-    description: "Scheduled messages",
-  },
+
   {
     to: "/profile",
     label: "Profile",
@@ -50,8 +44,8 @@ const features = [
 
 function HomePage() {
   return (
-    <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
-      <div className="mx-auto flex max-w-6xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+    <div className="min-h-screen bg-slate-900 p-4 sm:p-6 text-slate-100">
+      <div className="mx-auto flex max-w-6xl flex-col overflow-hidden rounded-[28px] border border-slate-800 bg-slate-900 shadow-2xl">
         <div className="flex items-center justify-between bg-emerald-600 px-6 py-5 text-white">
           <div>
             <p className="text-sm text-emerald-100">
@@ -74,8 +68,8 @@ function HomePage() {
 
         <div className="grid gap-6 p-6 lg:grid-cols-[1fr_320px]">
           <div>
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-              <h2 className="text-lg font-semibold text-slate-900">
+            <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+              <h2 className="text-lg font-semibold text-slate-100">
                 Quick access
               </h2>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -83,15 +77,15 @@ function HomePage() {
                   <Link
                     key={to}
                     to={to}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    className="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <div className="flex items-center gap-3">
                       <div className="rounded-2xl bg-emerald-100 p-2 text-emerald-700">
                         <Icon size={18} />
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900">{label}</p>
-                        <p className="text-sm text-slate-500">{description}</p>
+                        <p className="font-semibold text-slate-100">{label}</p>
+                        <p className="text-sm text-slate-400">{description}</p>
                       </div>
                     </div>
                   </Link>
@@ -100,8 +94,8 @@ function HomePage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <h2 className="text-lg font-semibold text-slate-900">Today</h2>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+            <h2 className="text-lg font-semibold text-slate-100">Today</h2>
             <div className="mt-4 space-y-3 text-sm text-slate-600">
               <div className="rounded-2xl bg-white p-3">4 unread messages</div>
               <div className="rounded-2xl bg-white p-3">2 stories to view</div>

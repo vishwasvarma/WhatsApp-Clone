@@ -1,18 +1,18 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   FiChevronDown,
   FiMoreVertical,
   FiPaperclip,
-  FiPhone,
   FiSearch,
   FiSend,
   FiSmile,
-  FiVideo,
   FiMessageSquare,
   FiCamera,
   FiBookmark,
-  FiCalendar,
+  FiFileText,
+  FiImage,
+  FiMapPin,
   FiUser,
   FiSettings,
 } from "react-icons/fi";
@@ -27,24 +27,19 @@ const initialContacts = [
 function ChatPage() {
   const [contacts, setContacts] = useState(initialContacts);
   const [selected, setSelected] = useState(initialContacts[0].name);
-  const [messagesByChat, setMessagesByChat] = useState<Record<string, any[]>>({
-    [initialContacts[0].name]: [
-      {
-        id: `${Date.now() - 20000}`,
-        sender: "them",
-        text: "Hello, this is your dark chat view.",
-        time: Date.now() - 20000,
-      },
-      {
-        id: `${Date.now() - 10000}`,
-        sender: "me",
-        text: "I’m building the WhatsApp sidebar and chat panel.",
-        time: Date.now() - 10000,
-      },
-    ],
-  });
+  // start with no messages
+  const [messagesByChat, setMessagesByChat] = useState<Record<string, any[]>>(
+    {},
+  );
   const [text, setText] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
+  const [filter, setFilter] = useState<"all" | "unread" | "groups">("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{
+    chat: string;
+    id: string;
+  } | null>(null);
 
   useEffect(() => {
     // ensure selected chat has an array
@@ -60,6 +55,18 @@ function ChatPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messagesByChat, selected]);
 
+  // update contact preview when messages change
+  useEffect(() => {
+    setContacts((prev) =>
+      prev.map((c) => {
+        const msgs = messagesByChat[c.name] || [];
+        if (msgs.length === 0) return c;
+        const last = msgs[msgs.length - 1].text || c.last;
+        return { ...c, last };
+      }),
+    );
+  }, [messagesByChat]);
+
   const sendMessage = async () => {
     if (!text.trim()) return;
     const msg = {
@@ -72,6 +79,10 @@ function ChatPage() {
       ...(prev || {}),
       [selected]: [...(prev[selected] || []), msg],
     }));
+    // update contact preview
+    setContacts((prev) =>
+      prev.map((c) => (c.name === selected ? { ...c, last: msg.text } : c)),
+    );
     setText("");
     try {
       await fetch("http://localhost:5001/api/message", {
@@ -84,13 +95,12 @@ function ChatPage() {
     }
   };
 
-  const handleDelete = async (chat: string, id: string) => {
-    const ok = window.confirm("Delete this message?");
-    if (!ok) return;
+  const handleDeleteConfirmed = async (chat: string, id: string) => {
     setMessagesByChat((prev) => ({
       ...(prev || {}),
       [chat]: (prev[chat] || []).filter((m) => m.id !== id),
     }));
+    setDeleteModal(null);
     try {
       await fetch(`http://localhost:5001/api/message/${id}`, {
         method: "DELETE",
@@ -98,14 +108,33 @@ function ChatPage() {
     } catch (e) {}
   };
 
+  const requestDelete = (chat: string, id: string) => {
+    setDeleteModal({ chat, id });
+  };
+
+  const selectChat = (name: string) => {
+    setSelected(name);
+    setContacts((prev) =>
+      prev.map((c) => (c.name === name ? { ...c, unread: 0 } : c)),
+    );
+  };
+
   const navItems = [
     { to: "/chat", icon: FiMessageSquare, label: "Chats" },
     { to: "/stories", icon: FiCamera, label: "Stories" },
     { to: "/highlights", icon: FiBookmark, label: "Highlights" },
-    { to: "/schedule", icon: FiCalendar, label: "Schedule" },
     { to: "/profile", icon: FiUser, label: "Profile" },
     { to: "/settings", icon: FiSettings, label: "Settings" },
   ];
+
+  const filteredContacts = contacts
+    .filter((c) => {
+      if (filter === "all") return true;
+      if (filter === "unread") return (c.unread || 0) > 0;
+      if (filter === "groups") return c.name.toLowerCase().includes("group");
+      return true;
+    })
+    .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="min-h-screen text-slate-100">
@@ -145,6 +174,8 @@ function ChatPage() {
             <div className="flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-400">
               <FiSearch />
               <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-transparent text-sm placeholder:text-slate-500 outline-none"
                 placeholder="Search or start new chat"
               />
@@ -152,22 +183,31 @@ function ChatPage() {
           </div>
 
           <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-3 text-sm text-slate-400">
-            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2 text-slate-100">
+            <button
+              onClick={() => setFilter("all")}
+              className={`rounded-full border border-slate-800 px-3 py-2 ${filter === "all" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-slate-400"}`}
+            >
               All
-            </span>
-            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2">
+            </button>
+            <button
+              onClick={() => setFilter("unread")}
+              className={`rounded-full border border-slate-800 px-3 py-2 ${filter === "unread" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-slate-400"}`}
+            >
               Unread
-            </span>
-            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-2">
+            </button>
+            <button
+              onClick={() => setFilter("groups")}
+              className={`rounded-full border border-slate-800 px-3 py-2 ${filter === "groups" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-slate-400"}`}
+            >
               Groups
-            </span>
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto px-3 py-4">
-            {contacts.map((contact) => (
+            {filteredContacts.map((contact) => (
               <button
                 key={contact.name}
-                onClick={() => setSelected(contact.name)}
+                onClick={() => selectChat(contact.name)}
                 className={`mb-3 flex w-full items-start gap-3 rounded-3xl px-4 py-3 text-left transition hover:bg-slate-800 ${selected === contact.name ? "bg-slate-800" : "bg-slate-950"}`}
               >
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-sm font-semibold text-white">
@@ -223,15 +263,12 @@ function ChatPage() {
               </div>
             </div>
             <div className="flex items-center gap-3 text-slate-300">
-              <button className="rounded-2xl border border-slate-800 bg-slate-950 p-3 transition hover:bg-slate-800">
-                <FiPhone size={18} />
-              </button>
-              <button className="rounded-2xl border border-slate-800 bg-slate-950 p-3 transition hover:bg-slate-800">
-                <FiVideo size={18} />
-              </button>
-              <button className="rounded-2xl border border-slate-800 bg-slate-950 p-3 transition hover:bg-slate-800">
+              <Link
+                to="/settings"
+                className="rounded-2xl border border-slate-800 bg-slate-950 p-3 transition hover:bg-slate-800"
+              >
                 <FiMoreVertical size={18} />
-              </button>
+              </Link>
             </div>
           </div>
 
@@ -245,7 +282,7 @@ function ChatPage() {
                   key={m.id}
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    handleDelete(selected, m.id);
+                    requestDelete(selected, m.id);
                   }}
                   className={`max-w-[70%] ${m.sender === "me" ? "self-end rounded-[28px] rounded-bl-none bg-emerald-500 text-white" : "self-start rounded-[28px] rounded-br-none bg-slate-800 text-slate-100"} px-5 py-3 text-sm shadow-sm`}
                 >
@@ -255,26 +292,59 @@ function ChatPage() {
             </div>
           </div>
 
-          <div className="border-t border-slate-800 bg-slate-950 px-5 py-4">
+          <div className="relative border-t border-slate-800 bg-slate-950 px-5 py-4">
+            {attachmentOpen ? (
+              <div className="absolute left-5 right-5 -top-40 z-20 rounded-3xl border border-slate-800 bg-slate-950 p-4 shadow-2xl">
+                <div className="grid grid-cols-4 gap-3">
+                  <button className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800">
+                    <FiFileText size={20} />
+                    <span className="text-[11px] uppercase tracking-[0.2em]">
+                      Doc
+                    </span>
+                  </button>
+                  <button className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800">
+                    <FiImage size={20} />
+                    <span className="text-[11px] uppercase tracking-[0.2em]">
+                      Photo
+                    </span>
+                  </button>
+                  <button className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800">
+                    <FiMapPin size={20} />
+                    <span className="text-[11px] uppercase tracking-[0.2em]">
+                      Location
+                    </span>
+                  </button>
+                  <button className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800">
+                    <FiSmile size={20} />
+                    <span className="text-[11px] uppercase tracking-[0.2em]">
+                      Reaction
+                    </span>
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="flex items-center gap-3 rounded-full border border-slate-800 bg-slate-900 px-4 py-3">
-              <button className="rounded-full p-2 text-slate-400 transition hover:bg-slate-800">
+              <button
+                onClick={() => setAttachmentOpen((prev) => !prev)}
+                className="rounded-full p-3 text-slate-400 transition hover:bg-slate-800"
+              >
                 <FiPaperclip size={18} />
               </button>
               <input
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") sendMessage();
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    sendMessage();
+                  }
                 }}
                 className="flex-1 bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-500"
                 placeholder="Type a message"
               />
-              <button className="rounded-full p-2 text-slate-400 transition hover:bg-slate-800">
-                <FiSmile size={18} />
-              </button>
               <button
                 onClick={sendMessage}
-                className="rounded-full bg-emerald-500 p-2 text-white transition hover:bg-emerald-400"
+                className="rounded-full bg-emerald-500 p-3 text-white transition hover:bg-emerald-400"
               >
                 <FiSend size={18} />
               </button>
@@ -282,6 +352,31 @@ function ChatPage() {
           </div>
         </main>
       </div>
+      {/* delete confirmation modal */}
+      {deleteModal ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-sm rounded-xl bg-slate-900 p-4 text-slate-100">
+            <p className="mb-4">This message should be deleted. Proceed?</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteModal(null)}
+                className="rounded-lg border border-slate-700 px-3 py-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() =>
+                  deleteModal &&
+                  handleDeleteConfirmed(deleteModal.chat, deleteModal.id)
+                }
+                className="rounded-lg bg-rose-600 px-3 py-1"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
