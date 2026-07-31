@@ -1,8 +1,17 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiArrowRight, FiLock, FiMessageSquare, FiUser } from "react-icons/fi";
+import { setCurrentUser } from "../auth";
 
 function LoginPage() {
   const navigate = useNavigate();
+  const [username, setUsername] = useState("");
+
+  const handleLogin = () => {
+    if (!username.trim()) return;
+    setCurrentUser(username.trim());
+    navigate("/");
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_#22c55e_0%,_#14532d_100%)] p-4">
@@ -45,6 +54,8 @@ function LoginPage() {
             <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
               <FiUser className="text-slate-400" />
               <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-transparent outline-none"
                 placeholder="Username"
               />
@@ -58,7 +69,7 @@ function LoginPage() {
               />
             </label>
             <button
-              onClick={() => navigate("/")}
+              onClick={handleLogin}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700"
             >
               Continue

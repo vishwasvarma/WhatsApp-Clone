@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   FiChevronDown,
   FiMoreVertical,
@@ -16,6 +16,8 @@ import {
   FiUser,
   FiSettings,
 } from "react-icons/fi";
+import socket from "../socket";
+import { getCurrentUser, logoutCurrentUser } from "../auth";
 
 const initialContacts = [
   { name: "Ravi Teja", last: "Hey, are you free today?", unread: 3 },
@@ -33,6 +35,8 @@ function ChatPage() {
   );
   const [text, setText] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
+  const navigate = useNavigate();
+  const currentUser = getCurrentUser();
   const [filter, setFilter] = useState<"all" | "unread" | "groups">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [attachmentOpen, setAttachmentOpen] = useState(false);
@@ -41,19 +45,39 @@ function ChatPage() {
     id: string;
   } | null>(null);
 
+  const handleLogout = () => {
+    logoutCurrentUser();
+    navigate("/login");
+  };
+
   useEffect(() => {
+    if (!currentUser) {
+      navigate("/login");
+      return;
+    }
     // ensure selected chat has an array
     setMessagesByChat((prev) => ({
       ...(prev || {}),
       [selected]: prev[selected] || [],
     }));
-  }, [selected]);
+  }, [currentUser, navigate, selected]);
 
   useEffect(() => {
     // scroll to bottom on messages change
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messagesByChat, selected]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    socket.emit("join-chat", { chatId: "general", user: currentUser });
+    socket.on("receive-message", handleReceivedMessage);
+    socket.on("message-deleted", handleDeletedMessage);
+    return () => {
+      socket.off("receive-message", handleReceivedMessage);
+      socket.off("message-deleted", handleDeletedMessage);
+    };
+  }, [currentUser, selected]);
 
   // update contact preview when messages change
   useEffect(() => {
@@ -68,10 +92,11 @@ function ChatPage() {
   }, [messagesByChat]);
 
   const sendMessage = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() || !currentUser) return;
     const msg = {
       id: `${Date.now()}`,
-      sender: "me",
+      sender: currentUser,
+      chat: selected,
       text: text.trim(),
       time: Date.now(),
     };
@@ -79,16 +104,16 @@ function ChatPage() {
       ...(prev || {}),
       [selected]: [...(prev[selected] || []), msg],
     }));
-    // update contact preview
     setContacts((prev) =>
       prev.map((c) => (c.name === selected ? { ...c, last: msg.text } : c)),
     );
     setText("");
+    socket.emit("send-message", msg);
     try {
       await fetch("http://localhost:5001/api/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...msg, chat: selected }),
+        body: JSON.stringify(msg),
       });
     } catch (e) {
       // ignore network errors for now
@@ -110,6 +135,38 @@ function ChatPage() {
 
   const requestDelete = (chat: string, id: string) => {
     setDeleteModal({ chat, id });
+  };
+
+  const handleReceivedMessage = (message: any) => {
+    if (!message?.chat) return;
+    setMessagesByChat((prev) => {
+      const current = prev[message.chat] || [];
+      if (current.some((m) => m.id === message.id)) return prev;
+      return {
+        ...prev,
+        [message.chat]: [...current, message],
+      };
+    });
+    setContacts((prev) =>
+      prev.map((c) => {
+        if (c.name !== message.chat) return c;
+        return {
+          ...c,
+          last: message.text,
+          unread: message.chat === selected ? 0 : (c.unread || 0) + 1,
+        };
+      }),
+    );
+  };
+
+  const handleDeletedMessage = (data: { id: string }) => {
+    setMessagesByChat((prev) => {
+      const next: Record<string, any[]> = {};
+      for (const [chat, msgs] of Object.entries(prev)) {
+        next[chat] = msgs.filter((m) => m.id !== data.id);
+      }
+      return next;
+    });
   };
 
   const selectChat = (name: string) => {
@@ -263,6 +320,12 @@ function ChatPage() {
               </div>
             </div>
             <div className="flex items-center gap-3 text-slate-300">
+              <button
+                onClick={handleLogout}
+                className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-3 text-slate-200 transition hover:bg-slate-800"
+              >
+                Logout
+              </button>
               <Link
                 to="/settings"
                 className="rounded-2xl border border-slate-800 bg-slate-950 p-3 transition hover:bg-slate-800"
@@ -284,7 +347,7 @@ function ChatPage() {
                     e.preventDefault();
                     requestDelete(selected, m.id);
                   }}
-                  className={`max-w-[70%] ${m.sender === "me" ? "self-end rounded-[28px] rounded-bl-none bg-emerald-500 text-white" : "self-start rounded-[28px] rounded-br-none bg-slate-800 text-slate-100"} px-5 py-3 text-sm shadow-sm`}
+                  className={`max-w-[70%] ${m.sender === currentUser ? "self-end rounded-[28px] rounded-bl-none bg-emerald-500 text-white" : "self-start rounded-[28px] rounded-br-none bg-slate-800 text-slate-100"} px-5 py-3 text-sm shadow-sm`}
                 >
                   {m.text}
                 </div>
