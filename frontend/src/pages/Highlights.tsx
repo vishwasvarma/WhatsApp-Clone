@@ -1,62 +1,80 @@
-import { FiBookmark, FiStar } from "react-icons/fi";
-
-const highlights = [
-  {
-    title: "Vacation",
-    subtitle: "7 stories",
-    color: "from-amber-400 to-orange-500",
-  },
-  {
-    title: "Friends",
-    subtitle: "12 stories",
-    color: "from-emerald-400 to-teal-500",
-  },
-  {
-    title: "College",
-    subtitle: "9 stories",
-    color: "from-sky-400 to-indigo-500",
-  },
-];
+import { useEffect, useMemo, useState } from "react";
+import AppShell from "../components/AppShell";
+import HighlightCard from "../components/HighlightCard";
+import StoryViewer from "../components/StoryViewer";
+import { useApp } from "../context/AppContext";
+import { api } from "../services/api";
+import type { Highlight, Story } from "../types";
 
 function HighlightsPage() {
-  return (
-    <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
-      <div className="mx-auto max-w-6xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-emerald-600">Highlights</p>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              Pinned moments
-            </h1>
-          </div>
-          <div className="rounded-full bg-emerald-100 p-2 text-emerald-700">
-            <FiBookmark size={20} />
-          </div>
-        </div>
+  const { user } = useApp();
+  const [items, setItems] = useState<Highlight[]>([]);
+  const [active, setActive] = useState<Story | null>(null);
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {highlights.map((highlight) => (
-            <div
-              key={highlight.title}
-              className="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50"
-            >
-              <div className={`h-28 bg-gradient-to-br ${highlight.color}`} />
-              <div className="p-4">
-                <div className="flex items-center gap-2">
-                  <FiStar className="text-amber-500" />
-                  <p className="font-semibold text-slate-900">
-                    {highlight.title}
-                  </p>
-                </div>
-                <p className="mt-2 text-sm text-slate-500">
-                  {highlight.subtitle}
-                </p>
-              </div>
-            </div>
+  useEffect(() => {
+    if (!user) return;
+    void api.highlights(user.id).then(setItems);
+  }, [user]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, Highlight[]>();
+    items.forEach((item) => {
+      const list = map.get(item.title) || [];
+      list.push(item);
+      map.set(item.title, list);
+    });
+    return Array.from(map.entries());
+  }, [items]);
+
+  if (!user) return null;
+
+  return (
+    <AppShell>
+      <aside className="flex w-[400px] shrink-0 flex-col border-r border-wa-border bg-wa-panel">
+        <div className="px-4 pb-2 pt-4">
+          <h1 className="text-[22px] font-bold text-wa-text">Highlights</h1>
+          <p className="mt-1 text-sm text-wa-muted">
+            Saved stories stay here even after the original status expires.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-4 p-4">
+          {groups.map(([title, list]) => (
+            <HighlightCard
+              key={title}
+              title={title}
+              items={list}
+              onOpen={(item) =>
+                setActive({
+                  id: item.id,
+                  sender: item.sender,
+                  senderId: item.userId,
+                  image: item.image,
+                  createdAt: item.createdAt,
+                  viewedBy: [],
+                })
+              }
+            />
           ))}
         </div>
-      </div>
-    </div>
+        {items.length === 0 ? (
+          <p className="px-4 text-sm text-wa-muted">
+            Open a story and choose Add to Highlight. Try Travel, College,
+            Friends or Memories.
+          </p>
+        ) : null}
+      </aside>
+      <main className="flex flex-1 flex-col items-center justify-center bg-wa-bg text-center">
+        <p className="text-2xl font-light text-wa-text">Your highlights</p>
+        <p className="mt-2 max-w-sm text-sm text-wa-muted">
+          Click a circle on the left to reopen a saved story.
+        </p>
+      </main>
+      <StoryViewer
+        story={active}
+        onClose={() => setActive(null)}
+        allowHighlight={false}
+      />
+    </AppShell>
   );
 }
 

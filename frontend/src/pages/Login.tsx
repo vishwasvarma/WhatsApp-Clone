@@ -1,92 +1,85 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { FiArrowRight, FiLock, FiMessageSquare, FiUser } from "react-icons/fi";
-import { setCurrentUser } from "../auth";
+import { FormEvent, useState } from "react";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useApp } from "../context/AppContext";
 
 function LoginPage() {
+  const { user, login } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+  const registered = Boolean(
+    (location.state as { registered?: boolean } | null)?.registered,
+  );
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (!username.trim()) return;
-    setCurrentUser(username.trim());
-    navigate("/");
+  if (user) return <Navigate to="/chat" replace />;
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await login(username.trim(), password);
+      navigate("/chat");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid credentials");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_#22c55e_0%,_#14532d_100%)] p-4">
-      <div className="w-full max-w-5xl overflow-hidden rounded-[32px] bg-white shadow-2xl lg:grid lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="flex flex-col justify-between bg-emerald-600 p-8 text-white">
-          <div>
-            <div className="flex items-center gap-3 text-xl font-semibold">
-              <FiMessageSquare size={24} />
-              <span>WhatsApp inspired</span>
-            </div>
-            <h1 className="mt-10 text-4xl font-semibold leading-tight">
-              Stay connected with your local community.
-            </h1>
-            <p className="mt-4 max-w-md text-sm text-emerald-50/90">
-              Enjoy a polished chat experience with stories, highlights,
-              reminders, and scheduled messages—all running locally.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/20 bg-white/10 p-4 text-sm">
-            <p className="font-medium">Secure local sign-in</p>
-            <p className="mt-1 text-emerald-50/80">
-              Simple, private, and fast.
-            </p>
-          </div>
-        </div>
-
-        <div className="p-8 sm:p-10">
-          <div className="flex items-center gap-2 text-emerald-600">
-            <FiMessageSquare size={20} />
-            <span className="font-semibold">Welcome back</span>
-          </div>
-          <h2 className="mt-3 text-3xl font-semibold text-slate-900">
-            Log in to your account
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Use your local username and password.
-          </p>
-
-          <div className="mt-8 space-y-4">
-            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-              <FiUser className="text-slate-400" />
-              <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-transparent outline-none"
-                placeholder="Username"
-              />
-            </label>
-            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-              <FiLock className="text-slate-400" />
-              <input
-                className="w-full bg-transparent outline-none"
-                placeholder="Password"
-                type="password"
-              />
-            </label>
-            <button
-              onClick={handleLogin}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700"
-            >
-              Continue
-              <FiArrowRight />
-            </button>
-          </div>
-
-          <p className="mt-6 text-sm text-slate-500">
-            New here?{" "}
-            <button
-              onClick={() => navigate("/register")}
-              className="font-semibold text-emerald-600"
-            >
-              Create an account
-            </button>
+    <div className="min-h-screen bg-wa-bg">
+      <div className="h-[222px] bg-wa-accent" />
+      <div className="-mt-40 mx-auto w-full max-w-[860px] rounded-sm bg-wa-panel px-10 py-12 shadow-2xl">
+        <div className="flex items-center gap-3">
+          <img src="/assets/icons/whatsapp.svg" alt="" className="h-10 w-10" />
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-wa-muted">
+            WhatsApp Web
           </p>
         </div>
+        <h1 className="mt-8 text-3xl font-light text-wa-text">
+          Use WhatsApp on your computer
+        </h1>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-wa-muted">
+          Create two accounts in two browser tabs, then message between them on
+          this local server. No internet or database required.
+        </p>
+        <form onSubmit={(e) => void onSubmit(e)} className="mt-8 max-w-md space-y-3">
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Username"
+            className="w-full rounded bg-wa-header px-4 py-3 text-wa-text outline-none"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full rounded bg-wa-header px-4 py-3 text-wa-text outline-none"
+          />
+          {registered ? (
+            <p className="text-sm text-wa-accent">
+              Account created. Please log in.
+            </p>
+          ) : null}
+          {error ? <p className="text-sm text-wa-danger">{error}</p> : null}
+          <button
+            disabled={loading}
+            className="w-full rounded bg-wa-accent py-3 font-medium text-wa-bg"
+          >
+            {loading ? "Logging in..." : "Log in"}
+          </button>
+        </form>
+        <p className="mt-6 text-sm text-wa-muted">
+          New here?{" "}
+          <Link to="/register" className="text-wa-accent">
+            Create an account
+          </Link>
+        </p>
       </div>
     </div>
   );

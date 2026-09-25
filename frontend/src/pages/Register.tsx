@@ -1,69 +1,87 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { FiCalendar, FiLock, FiUser, FiUserPlus } from "react-icons/fi";
-import { setCurrentUser } from "../auth";
+import { FormEvent, useState } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useApp } from "../context/AppContext";
 
 function RegisterPage() {
+  const { user, register } = useApp();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [birthday, setBirthday] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
-    if (!username.trim()) return;
-    setCurrentUser(username.trim());
-    navigate("/");
+  if (user) return <Navigate to="/chat" replace />;
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!username.trim() || !password || !birthday) {
+      setError("Username, password and birthday are required");
+      return;
+    }
+    setLoading(true);
+    try {
+      await register(username.trim(), password, birthday);
+      navigate("/login", { state: { registered: true } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not register");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_#22c55e_0%,_#14532d_100%)] p-4">
-      <div className="w-full max-w-4xl overflow-hidden rounded-[32px] bg-white shadow-2xl lg:grid lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="bg-slate-900 p-8 text-white">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <FiUserPlus size={20} />
-            Create your profile
-          </div>
-          <h1 className="mt-6 text-3xl font-semibold">
-            Join the local WhatsApp-inspired experience.
-          </h1>
-          <p className="mt-3 text-sm text-slate-300">
-            Set up your identity, birthday, and chat preferences instantly.
+    <div className="min-h-screen bg-wa-bg">
+      <div className="h-[222px] bg-wa-accent" />
+      <div className="-mt-40 mx-auto w-full max-w-[860px] rounded-sm bg-wa-panel px-10 py-12 shadow-2xl">
+        <div className="flex items-center gap-3">
+          <img src="/assets/icons/whatsapp.svg" alt="" className="h-10 w-10" />
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-wa-muted">
+            WhatsApp Web
           </p>
         </div>
-
-        <div className="p-8 sm:p-10">
-          <div className="space-y-4">
-            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-              <FiUser className="text-slate-400" />
-              <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-transparent outline-none"
-                placeholder="Display name"
-              />
-            </label>
-            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-              <FiLock className="text-slate-400" />
-              <input
-                className="w-full bg-transparent outline-none"
-                placeholder="Password"
-                type="password"
-              />
-            </label>
-            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-              <FiCalendar className="text-slate-400" />
-              <input
-                className="w-full bg-transparent outline-none"
-                placeholder="Birthday"
-                type="date"
-              />
-            </label>
-            <button
-              onClick={handleRegister}
-              className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700"
-            >
-              Register now
-            </button>
-          </div>
-        </div>
+        <h1 className="mt-8 text-3xl font-light text-wa-text">Create your account</h1>
+        <p className="mt-3 text-sm text-wa-muted">
+          Your birthday is stored for reminders only. No automatic wishes are sent.
+        </p>
+        <form onSubmit={(e) => void onSubmit(e)} className="mt-8 max-w-md space-y-3">
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Username"
+            className="w-full rounded bg-wa-header px-4 py-3 text-wa-text outline-none"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full rounded bg-wa-header px-4 py-3 text-wa-text outline-none"
+          />
+          <label className="block text-sm text-wa-muted">
+            Birthday
+            <input
+              type="date"
+              value={birthday}
+              onChange={(e) => setBirthday(e.target.value)}
+              className="mt-1 w-full rounded bg-wa-header px-4 py-3 text-wa-text outline-none"
+            />
+          </label>
+          {error ? <p className="text-sm text-wa-danger">{error}</p> : null}
+          <button
+            disabled={loading}
+            className="w-full rounded bg-wa-accent py-3 font-medium text-wa-bg"
+          >
+            {loading ? "Creating..." : "Register"}
+          </button>
+        </form>
+        <p className="mt-6 text-sm text-wa-muted">
+          Already have an account?{" "}
+          <Link to="/login" className="text-wa-accent">
+            Log in
+          </Link>
+        </p>
       </div>
     </div>
   );

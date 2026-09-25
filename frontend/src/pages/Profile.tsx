@@ -1,55 +1,66 @@
-import { FiCamera, FiGift, FiUser } from "react-icons/fi";
+import { FormEvent, useState } from "react";
+import AppShell from "../components/AppShell";
+import Avatar from "../components/Avatar";
+import { useApp } from "../context/AppContext";
 
 function ProfilePage() {
+  const { user, updateProfile } = useApp();
+  const [birthday, setBirthday] = useState(user?.birthday || "");
+  const [about, setAbout] = useState(
+    user?.about || "Hey there! I am using WhatsApp.",
+  );
+  const [saved, setSaved] = useState("");
+
+  if (!user) return null;
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    await updateProfile({ birthday, about });
+    setSaved("Profile updated");
+  };
+
   return (
-    <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
-      <div className="mx-auto max-w-6xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-emerald-600">Profile</p>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              Your personal profile
-            </h1>
-          </div>
-          <div className="rounded-full bg-emerald-100 p-2 text-emerald-700">
-            <FiUser size={20} />
-          </div>
+    <AppShell>
+      <aside className="w-[400px] shrink-0 border-r border-wa-border bg-wa-panel">
+        <div className="bg-wa-header px-4 py-5">
+          <h1 className="text-lg font-medium text-wa-text">Profile</h1>
         </div>
-
-        <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 text-3xl font-semibold text-white">
-              R
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900">Rahul</h2>
-              <p className="text-sm text-slate-500">
-                Local profile • Available
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-emerald-600">
-                <FiCamera />
-                <span className="font-semibold">Photo</span>
-              </div>
-              <p className="mt-2 text-sm text-slate-500">
-                Profile photo support is ready for future uploads.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-emerald-600">
-                <FiGift />
-                <span className="font-semibold">Birthday</span>
-              </div>
-              <p className="mt-2 text-sm text-slate-500">10 May 1998</p>
-            </div>
-          </div>
+        <div className="flex flex-col items-center bg-wa-panel py-8">
+          <Avatar name={user.username} size={160} />
+          <p className="mt-4 text-xl text-wa-text">{user.username}</p>
         </div>
-      </div>
-    </div>
+        <form onSubmit={(e) => void onSubmit(e)} className="space-y-5 px-6 py-4">
+          <label className="block text-xs text-wa-accent">
+            About
+            <input
+              value={about}
+              onChange={(e) => setAbout(e.target.value)}
+              className="mt-2 w-full border-b border-wa-accent bg-transparent py-2 text-wa-text outline-none"
+            />
+          </label>
+          <label className="block text-xs text-wa-accent">
+            Birthday
+            <input
+              type="date"
+              value={birthday}
+              onChange={(e) => setBirthday(e.target.value)}
+              className="mt-2 w-full border-b border-wa-accent bg-transparent py-2 text-wa-text outline-none"
+            />
+          </label>
+          <p className="text-sm text-wa-muted">
+            Contacts receive a reminder one day before this date. No automatic
+            birthday message is sent.
+          </p>
+          <button className="rounded bg-wa-accent px-4 py-2 text-sm font-medium text-wa-bg">
+            Save
+          </button>
+          {saved ? <p className="text-sm text-wa-accent">{saved}</p> : null}
+        </form>
+      </aside>
+      <main className="flex flex-1 items-center justify-center bg-wa-bg text-wa-muted">
+        Profile
+      </main>
+    </AppShell>
   );
 }
 

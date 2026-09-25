@@ -4,33 +4,71 @@
 
 :root {
   font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  color: #e6eef3;
-  background: #0b1116;
+    "Segoe UI", "Helvetica Neue", Helvetica, "Lucida Grande", Arial, sans-serif;
+  color: #e9edef;
+  background: #0b141a;
 }
 
-body {
+html,
+body,
+#root {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: linear-gradient(180deg, #071018 0%, #0b1116 100%);
-  color: #e6eef3;
+  height: 100%;
+  background: #0b141a;
+  color: #e9edef;
 }
 
 * {
   box-sizing: border-box;
 }
 
+button,
+input,
+textarea {
+  font-family: inherit;
+}
+
 ::-webkit-scrollbar {
-  width: 7px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1f2937;
+  background: #374045;
   border-radius: 999px;
+}
+
+.wa-wallpaper {
+  background-color: #0b141a;
+  background-image:
+    linear-gradient(rgba(11, 20, 26, 0.82), rgba(11, 20, 26, 0.82)),
+    url("/assets/backgrounds/doodle.svg");
+  background-repeat: repeat;
+  background-size: 360px;
+}
+
+.wa-bubble-in,
+.wa-bubble-out {
+  position: relative;
+}
+
+.wa-bubble-out::after {
+  content: "";
+  position: absolute;
+  right: -8px;
+  top: 0;
+  border-width: 0 0 10px 10px;
+  border-style: solid;
+  border-color: transparent transparent transparent #005c4b;
+}
+
+.wa-bubble-in::after {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 0;
+  border-width: 0 10px 10px 0;
+  border-style: solid;
+  border-color: transparent #202c33 transparent transparent;
 }

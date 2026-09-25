@@ -1,446 +1,284 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import {
-  FiChevronDown,
-  FiMoreVertical,
-  FiPaperclip,
-  FiSearch,
-  FiSend,
-  FiSmile,
-  FiMessageSquare,
-  FiCamera,
-  FiBookmark,
-  FiFileText,
-  FiImage,
-  FiMapPin,
-  FiUser,
-  FiSettings,
-} from "react-icons/fi";
-import socket from "../socket";
-import { getCurrentUser, logoutCurrentUser } from "../auth";
-
-const initialContacts = [
-  { name: "Ravi Teja", last: "Hey, are you free today?", unread: 3 },
-  { name: "Ankur Pranav", last: "Sure, let's do it", unread: 0 },
-  { name: "Mira Sharma", last: "Typing...", unread: 0 },
-  { name: "Group Chat", last: "Meeting at 4 PM", unread: 5 },
-];
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MdSearch, MdMoreVert, MdLock } from "react-icons/md";
+import AppShell from "../components/AppShell";
+import ChatList, { type ChatPreview } from "../components/ChatList";
+import MessageBubble from "../components/MessageBubble";
+import MessageInput from "../components/MessageInput";
+import DeleteConfirm from "../components/DeleteConfirm";
+import ScheduleModal from "../components/ScheduleModal";
+import BirthdayNotification from "../components/BirthdayNotification";
+import Avatar from "../components/Avatar";
+import { useApp } from "../context/AppContext";
+import { api } from "../services/api";
+import socket from "../socket/socket";
+import type { Message, ScheduledMessage, User } from "../types";
 
 function ChatPage() {
-  const [contacts, setContacts] = useState(initialContacts);
-  const [selected, setSelected] = useState(initialContacts[0].name);
-  // start with no messages
-  const [messagesByChat, setMessagesByChat] = useState<Record<string, any[]>>(
-    {},
-  );
+  const { user, users, notifications, markNotificationRead } = useApp();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [scheduled, setScheduled] = useState<ScheduledMessage[]>([]);
+  const [selected, setSelected] = useState<User | null>(null);
   const [text, setText] = useState("");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [unread, setUnread] = useState<Record<string, number>>({});
+  const [typing, setTyping] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [toast, setToast] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
-  const currentUser = getCurrentUser();
-  const [filter, setFilter] = useState<"all" | "unread" | "groups">("all");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [attachmentOpen, setAttachmentOpen] = useState(false);
-  const [deleteModal, setDeleteModal] = useState<{
-    chat: string;
-    id: string;
-  } | null>(null);
+  const typingTimer = useRef<number | null>(null);
 
-  const handleLogout = () => {
-    logoutCurrentUser();
-    navigate("/login");
-  };
+  const contacts = useMemo(
+    () => users.filter((entry) => entry.id !== user?.id),
+    [users, user],
+  );
+
+  const visibleMessages = messages.filter((item) => {
+    if (!selected || !user) return false;
+    return (
+      (item.senderId === user.id && item.receiverId === selected.id) ||
+      (item.senderId === selected.id && item.receiverId === user.id)
+    );
+  });
+
+  const previews: ChatPreview[] = contacts
+    .map((contact) => {
+      const related = messages.filter(
+        (item) =>
+          (item.senderId === contact.id || item.receiverId === contact.id) &&
+          (item.senderId === user?.id || item.receiverId === user?.id),
+      );
+      const last = related[related.length - 1];
+      return {
+        user: contact,
+        last: last?.text,
+        time: last?.time,
+        unread: unread[contact.id] || 0,
+      };
+    })
+    .filter((item) => item.user.username.toLowerCase().includes(search.toLowerCase()))
+    .filter((item) => (filter === "unread" ? item.unread > 0 : true))
+    .sort((a, b) => (b.time || 0) - (a.time || 0));
 
   useEffect(() => {
-    if (!currentUser) {
-      navigate("/login");
-      return;
-    }
-    // ensure selected chat has an array
-    setMessagesByChat((prev) => ({
-      ...(prev || {}),
-      [selected]: prev[selected] || [],
-    }));
-  }, [currentUser, navigate, selected]);
+    if (!user) return;
+    void api.messages(user.id).then(setMessages);
+    void api.schedules(user.id).then(setScheduled);
+  }, [user]);
 
   useEffect(() => {
-    // scroll to bottom on messages change
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messagesByChat, selected]);
+  }, [visibleMessages.length, selected?.id]);
 
   useEffect(() => {
-    if (!currentUser) return;
-    socket.emit("join-chat", { chatId: "general", user: currentUser });
-    socket.on("receive-message", handleReceivedMessage);
-    socket.on("message-deleted", handleDeletedMessage);
-    return () => {
-      socket.off("receive-message", handleReceivedMessage);
-      socket.off("message-deleted", handleDeletedMessage);
+    if (!user) return;
+
+    const onMessage = (message: Message) => {
+      if (message.senderId !== user.id && message.receiverId !== user.id) return;
+      setMessages((prev) =>
+        prev.some((item) => item.id === message.id) ? prev : [...prev, message],
+      );
+      const otherId =
+        message.senderId === user.id ? message.receiverId : message.senderId;
+      if (message.senderId !== user.id && selected?.id !== otherId) {
+        setUnread((prev) => ({ ...prev, [otherId]: (prev[otherId] || 0) + 1 }));
+      }
     };
-  }, [currentUser, selected]);
+    const onDeleted = (data: { id: string }) => {
+      setMessages((prev) => prev.filter((item) => item.id !== data.id));
+    };
+    const onTyping = (data: { senderId?: string }) => {
+      if (data.senderId && data.senderId === selected?.id) setTyping(true);
+    };
+    const onStop = (data: { senderId?: string }) => {
+      if (data.senderId && data.senderId === selected?.id) setTyping(false);
+    };
+    const onScheduled = (item: ScheduledMessage) => {
+      if (item.senderId !== user.id) return;
+      setScheduled((prev) =>
+        prev.some((entry) => entry.id === item.id) ? prev : [item, ...prev],
+      );
+    };
 
-  // update contact preview when messages change
-  useEffect(() => {
-    setContacts((prev) =>
-      prev.map((c) => {
-        const msgs = messagesByChat[c.name] || [];
-        if (msgs.length === 0) return c;
-        const last = msgs[msgs.length - 1].text || c.last;
-        return { ...c, last };
-      }),
-    );
-  }, [messagesByChat]);
+    socket.on("receive-message", onMessage);
+    socket.on("message-deleted", onDeleted);
+    socket.on("typing", onTyping);
+    socket.on("stop-typing", onStop);
+    socket.on("schedule-created", onScheduled);
+    socket.on("schedule-sent", onScheduled);
+    return () => {
+      socket.off("receive-message", onMessage);
+      socket.off("message-deleted", onDeleted);
+      socket.off("typing", onTyping);
+      socket.off("stop-typing", onStop);
+      socket.off("schedule-created", onScheduled);
+      socket.off("schedule-sent", onScheduled);
+    };
+  }, [user, selected?.id]);
+
+  if (!user) return null;
+
+  const selectContact = (contact: User) => {
+    setSelected(contact);
+    setTyping(false);
+    setUnread((prev) => ({ ...prev, [contact.id]: 0 }));
+  };
 
   const sendMessage = async () => {
-    if (!text.trim() || !currentUser) return;
-    const msg = {
-      id: `${Date.now()}`,
-      sender: currentUser,
-      chat: selected,
-      text: text.trim(),
-      time: Date.now(),
-    };
-    setMessagesByChat((prev) => ({
-      ...(prev || {}),
-      [selected]: [...(prev[selected] || []), msg],
-    }));
-    setContacts((prev) =>
-      prev.map((c) => (c.name === selected ? { ...c, last: msg.text } : c)),
-    );
+    if (!selected || !text.trim()) return;
+    const payload = text.trim();
     setText("");
-    socket.emit("send-message", msg);
+    emitTyping(false);
     try {
-      await fetch("http://localhost:5001/api/message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(msg),
-      });
-    } catch (e) {
-      // ignore network errors for now
+      const message = await api.sendMessage(user.id, selected.id, payload);
+      setMessages((prev) =>
+        prev.some((item) => item.id === message.id) ? prev : [...prev, message],
+      );
+    } catch (err) {
+      setText(payload);
+      setToast(err instanceof Error ? err.message : "Could not send");
     }
   };
 
-  const handleDeleteConfirmed = async (chat: string, id: string) => {
-    setMessagesByChat((prev) => ({
-      ...(prev || {}),
-      [chat]: (prev[chat] || []).filter((m) => m.id !== id),
-    }));
-    setDeleteModal(null);
-    try {
-      await fetch(`http://localhost:5001/api/message/${id}`, {
-        method: "DELETE",
-      });
-    } catch (e) {}
-  };
-
-  const requestDelete = (chat: string, id: string) => {
-    setDeleteModal({ chat, id });
-  };
-
-  const handleReceivedMessage = (message: any) => {
-    if (!message?.chat) return;
-    setMessagesByChat((prev) => {
-      const current = prev[message.chat] || [];
-      if (current.some((m) => m.id === message.id)) return prev;
-      return {
-        ...prev,
-        [message.chat]: [...current, message],
-      };
+  const emitTyping = (isTyping: boolean) => {
+    if (!selected) return;
+    socket.emit(isTyping ? "typing" : "stop-typing", {
+      senderId: user.id,
+      receiverId: selected.id,
+      username: user.username,
     });
-    setContacts((prev) =>
-      prev.map((c) => {
-        if (c.name !== message.chat) return c;
-        return {
-          ...c,
-          last: message.text,
-          unread: message.chat === selected ? 0 : (c.unread || 0) + 1,
-        };
-      }),
-    );
+    if (typingTimer.current) window.clearTimeout(typingTimer.current);
+    if (isTyping) {
+      typingTimer.current = window.setTimeout(() => emitTyping(false), 1500);
+    }
   };
 
-  const handleDeletedMessage = (data: { id: string }) => {
-    setMessagesByChat((prev) => {
-      const next: Record<string, any[]> = {};
-      for (const [chat, msgs] of Object.entries(prev)) {
-        next[chat] = msgs.filter((m) => m.id !== data.id);
-      }
-      return next;
-    });
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    const id = deleteId;
+    setDeleteId(null);
+    setMessages((prev) => prev.filter((item) => item.id !== id));
+    await api.deleteMessage(id);
   };
 
-  const selectChat = (name: string) => {
-    setSelected(name);
-    setContacts((prev) =>
-      prev.map((c) => (c.name === name ? { ...c, unread: 0 } : c)),
-    );
-  };
-
-  const navItems = [
-    { to: "/chat", icon: FiMessageSquare, label: "Chats" },
-    { to: "/stories", icon: FiCamera, label: "Stories" },
-    { to: "/highlights", icon: FiBookmark, label: "Highlights" },
-    { to: "/profile", icon: FiUser, label: "Profile" },
-    { to: "/settings", icon: FiSettings, label: "Settings" },
-  ];
-
-  const filteredContacts = contacts
-    .filter((c) => {
-      if (filter === "all") return true;
-      if (filter === "unread") return (c.unread || 0) > 0;
-      if (filter === "groups") return c.name.toLowerCase().includes("group");
-      return true;
-    })
-    .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const pendingForChat = scheduled.filter(
+    (item) =>
+      item.status === "pending" &&
+      selected &&
+      item.receiverId === selected.id,
+  );
 
   return (
-    <div className="min-h-screen text-slate-100">
-      <div className="mx-auto flex min-h-[92vh] max-w-[1600px] overflow-hidden rounded-[30px] border border-slate-800 bg-slate-900 shadow-2xl sm:min-h-[90vh]">
-        <aside className="hidden w-[360px] flex-col border-r border-slate-800 bg-slate-950 lg:flex">
-          <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="grid gap-2">
-                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                  WhatsApp
-                </p>
-                <h1 className="mt-2 text-2xl font-semibold text-white">Chat</h1>
-              </div>
-            </div>
-            <Link
-              to="/"
-              className="grid h-11 w-11 place-items-center rounded-2xl border border-slate-800 bg-slate-900 text-slate-200 transition hover:bg-slate-800"
-            >
-              <FiChevronDown size={20} />
-            </Link>
+    <AppShell>
+      <ChatList
+        currentUserName={user.username}
+        search={search}
+        onSearch={setSearch}
+        filter={filter}
+        onFilter={setFilter}
+        items={previews}
+        selectedId={selected?.id}
+        onSelect={selectContact}
+      />
+      <main className="flex min-w-0 flex-1 flex-col bg-wa-panel">
+        {!selected ? (
+          <div className="flex h-full flex-col items-center justify-center border-b-[6px] border-wa-accent bg-wa-bg text-center">
+            <img src="/assets/icons/whatsapp.svg" alt="" className="h-16 w-16 opacity-80" />
+            <h2 className="mt-6 text-3xl font-light text-wa-text">WhatsApp Web</h2>
+            <p className="mt-3 max-w-md text-sm leading-6 text-wa-muted">
+              Send and receive messages between two local accounts. Open another
+              tab, register a second user, then select that contact to start chatting.
+            </p>
+            <p className="mt-8 flex items-center gap-2 text-xs text-wa-muted">
+              <MdLock /> Local demo · messages stay in server memory
+            </p>
           </div>
-
-          <div className="flex gap-2 px-5 py-4">
-            {navItems.map(({ to, icon: Icon, label }) => (
-              <Link
-                key={to}
-                to={to}
-                title={label}
-                className="rounded-2xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800"
-              >
-                <Icon size={18} />
-              </Link>
-            ))}
-          </div>
-
-          <div className="border-b border-slate-800 px-5 py-4">
-            <div className="flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-400">
-              <FiSearch />
-              <input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-transparent text-sm placeholder:text-slate-500 outline-none"
-                placeholder="Search or start new chat"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-3 text-sm text-slate-400">
-            <button
-              onClick={() => setFilter("all")}
-              className={`rounded-full border border-slate-800 px-3 py-2 ${filter === "all" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-slate-400"}`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setFilter("unread")}
-              className={`rounded-full border border-slate-800 px-3 py-2 ${filter === "unread" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-slate-400"}`}
-            >
-              Unread
-            </button>
-            <button
-              onClick={() => setFilter("groups")}
-              className={`rounded-full border border-slate-800 px-3 py-2 ${filter === "groups" ? "bg-slate-800 text-slate-100" : "bg-slate-900 text-slate-400"}`}
-            >
-              Groups
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-3 py-4">
-            {filteredContacts.map((contact) => (
-              <button
-                key={contact.name}
-                onClick={() => selectChat(contact.name)}
-                className={`mb-3 flex w-full items-start gap-3 rounded-3xl px-4 py-3 text-left transition hover:bg-slate-800 ${selected === contact.name ? "bg-slate-800" : "bg-slate-950"}`}
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-sm font-semibold text-white">
-                  {contact.name
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-semibold text-white">
-                      {contact.name}
-                    </p>
-                    {contact.unread > 0 ? (
-                      <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-semibold text-slate-950">
-                        {contact.unread}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 truncate text-sm text-slate-400">
-                    {contact.last}
+        ) : (
+          <>
+            <header className="flex items-center justify-between bg-wa-header px-4 py-2">
+              <div className="flex items-center gap-3">
+                <Avatar name={selected.username} online={selected.online} size={40} />
+                <div>
+                  <p className="text-[16px] text-wa-text">{selected.username}</p>
+                  <p className="text-xs text-wa-muted">
+                    {typing ? "typing..." : selected.online ? "online" : "offline"}
                   </p>
                 </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="border-t border-slate-800 px-5 py-4 text-sm text-slate-500">
-            <p className="font-medium text-slate-300">Recent</p>
-            <div className="mt-3 grid gap-3">
-              <button className="flex items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3 text-left text-sm transition hover:bg-slate-800">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-slate-300">
-                  +
-                </span>
-                <div>
-                  <p className="font-semibold text-white">New group</p>
-                  <p className="text-slate-500">Create a new community</p>
-                </div>
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        <main className="flex flex-1 flex-col bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.03)_0%,_transparent_25%),linear-gradient(180deg,_#0f1419_0%,_#111827_100%)] bg-[length:120px_120px] bg-[position:0_0]">
-          <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-lg font-semibold text-white">
-                {selected[0]}
               </div>
-              <div>
-                <p className="text-lg font-semibold text-white">{selected}</p>
-                <p className="text-sm text-slate-400">Online</p>
+              <div className="flex items-center gap-3 text-wa-icon">
+                <MdSearch size={22} />
+                <MdMoreVert size={22} />
               </div>
-            </div>
-            <div className="flex items-center gap-3 text-slate-300">
-              <button
-                onClick={handleLogout}
-                className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-3 text-slate-200 transition hover:bg-slate-800"
-              >
-                Logout
-              </button>
-              <Link
-                to="/settings"
-                className="rounded-2xl border border-slate-800 bg-slate-950 p-3 transition hover:bg-slate-800"
-              >
-                <FiMoreVertical size={18} />
-              </Link>
-            </div>
-          </div>
-
-          <div className="relative flex-1 overflow-y-auto px-5 py-6">
-            <div
-              ref={listRef}
-              className="mx-auto flex max-w-4xl flex-col gap-3"
-            >
-              {(messagesByChat[selected] || []).map((m) => (
-                <div
-                  key={m.id}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    requestDelete(selected, m.id);
-                  }}
-                  className={`max-w-[70%] ${m.sender === currentUser ? "self-end rounded-[28px] rounded-bl-none bg-emerald-500 text-white" : "self-start rounded-[28px] rounded-br-none bg-slate-800 text-slate-100"} px-5 py-3 text-sm shadow-sm`}
-                >
-                  {m.text}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="relative border-t border-slate-800 bg-slate-950 px-5 py-4">
-            {attachmentOpen ? (
-              <div className="absolute left-5 right-5 -top-40 z-20 rounded-3xl border border-slate-800 bg-slate-950 p-4 shadow-2xl">
-                <div className="grid grid-cols-4 gap-3">
-                  <button className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800">
-                    <FiFileText size={20} />
-                    <span className="text-[11px] uppercase tracking-[0.2em]">
-                      Doc
-                    </span>
-                  </button>
-                  <button className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800">
-                    <FiImage size={20} />
-                    <span className="text-[11px] uppercase tracking-[0.2em]">
-                      Photo
-                    </span>
-                  </button>
-                  <button className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800">
-                    <FiMapPin size={20} />
-                    <span className="text-[11px] uppercase tracking-[0.2em]">
-                      Location
-                    </span>
-                  </button>
-                  <button className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-slate-800 bg-slate-900 p-3 text-slate-200 transition hover:bg-slate-800">
-                    <FiSmile size={20} />
-                    <span className="text-[11px] uppercase tracking-[0.2em]">
-                      Reaction
-                    </span>
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            <div className="flex items-center gap-3 rounded-full border border-slate-800 bg-slate-900 px-4 py-3">
-              <button
-                onClick={() => setAttachmentOpen((prev) => !prev)}
-                className="rounded-full p-3 text-slate-400 transition hover:bg-slate-800"
-              >
-                <FiPaperclip size={18} />
-              </button>
-              <input
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-                className="flex-1 bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-500"
-                placeholder="Type a message"
+            </header>
+            <div className="wa-wallpaper flex min-h-0 flex-1 flex-col">
+              <BirthdayNotification
+                items={notifications}
+                onDismiss={(id) => void markNotificationRead(id)}
               />
-              <button
-                onClick={sendMessage}
-                className="rounded-full bg-emerald-500 p-3 text-white transition hover:bg-emerald-400"
+              {pendingForChat.length > 0 ? (
+                <div className="px-4 pt-3">
+                  <div className="rounded-lg bg-[#182229] px-3 py-2 text-xs text-wa-muted">
+                    {pendingForChat.length} scheduled message
+                    {pendingForChat.length > 1 ? "s" : ""} waiting to send
+                  </div>
+                </div>
+              ) : null}
+              {toast ? (
+                <div className="px-4 pt-3">
+                  <div className="rounded-lg bg-[#182229] px-3 py-2 text-sm text-wa-accent">
+                    {toast}
+                  </div>
+                </div>
+              ) : null}
+              <div
+                ref={listRef}
+                className="min-h-0 flex-1 overflow-y-auto"
               >
-                <FiSend size={18} />
-              </button>
+                <div className="mx-auto flex min-h-full w-full max-w-[840px] flex-col justify-end gap-1 px-8 py-3">
+                {visibleMessages.map((message) => (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    mine={message.senderId === user.id}
+                    onDelete={setDeleteId}
+                  />
+                ))}
+                </div>
+              </div>
             </div>
-          </div>
-        </main>
-      </div>
-      {/* delete confirmation modal */}
-      {deleteModal ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-sm rounded-xl bg-slate-900 p-4 text-slate-100">
-            <p className="mb-4">This message should be deleted. Proceed?</p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteModal(null)}
-                className="rounded-lg border border-slate-700 px-3 py-1"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() =>
-                  deleteModal &&
-                  handleDeleteConfirmed(deleteModal.chat, deleteModal.id)
-                }
-                className="rounded-lg bg-rose-600 px-3 py-1"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+            <MessageInput
+              value={text}
+              onChange={setText}
+              onSend={() => void sendMessage()}
+              onSchedule={() => setScheduleOpen(true)}
+              onTyping={emitTyping}
+            />
+          </>
+        )}
+      </main>
+      <DeleteConfirm
+        open={Boolean(deleteId)}
+        onCancel={() => setDeleteId(null)}
+        onConfirm={() => void confirmDelete()}
+      />
+      <ScheduleModal
+        open={scheduleOpen}
+        text={text}
+        onText={setText}
+        onClose={() => setScheduleOpen(false)}
+        onSchedule={async (iso) => {
+          if (!selected) return;
+          await api.scheduleMessage(user.id, selected.id, text.trim(), iso);
+          setText("");
+          setToast("Message scheduled");
+          window.setTimeout(() => setToast(""), 2500);
+          const list = await api.schedules(user.id);
+          setScheduled(list);
+        }}
+      />
+    </AppShell>
   );
 }
 
