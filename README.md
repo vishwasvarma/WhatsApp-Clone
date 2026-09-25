@@ -17,7 +17,7 @@ Use two terminals.
 Terminal 1 — backend:
 
 ```bash
-cd D:\wApp\WhatsApp-Clone\backend
+cd WhatsApp-Clone\backend
 npm install
 npm run dev
 ```
@@ -27,7 +27,7 @@ Backend: http://localhost:5000
 Terminal 2 — frontend:
 
 ```bash
-cd D:\wApp\WhatsApp-Clone\frontend
+cd WhatsApp-Clone\frontend
 npm install
 npm run dev
 ```
