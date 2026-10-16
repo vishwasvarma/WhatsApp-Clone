@@ -13,6 +13,8 @@ function StoriesPage() {
   const { user } = useApp();
   const [stories, setStories] = useState<Story[]>([]);
   const [active, setActive] = useState<Story | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<Story | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -27,11 +29,17 @@ function StoriesPage() {
 
   useEffect(() => {
     const refresh = () => void load();
+    const removeDeletedStory = ({ id }: { id: string }) => {
+      setStories((current) => current.filter((story) => story.id !== id));
+      setActive((current) => (current?.id === id ? null : current));
+    };
     socket.on("story-uploaded", refresh);
     socket.on("story-viewed", refresh);
+    socket.on("story-deleted", removeDeletedStory);
     return () => {
       socket.off("story-uploaded", refresh);
       socket.off("story-viewed", refresh);
+      socket.off("story-deleted", removeDeletedStory);
     };
   }, [load]);
 
@@ -74,6 +82,24 @@ function StoriesPage() {
     await load();
   };
 
+  const deleteStory = async () => {
+    if (!deleteCandidate) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api.deleteStory(deleteCandidate.id, user.id);
+      setStories((current) =>
+        current.filter((story) => story.id !== deleteCandidate.id),
+      );
+      if (active?.id === deleteCandidate.id) setActive(null);
+      setDeleteCandidate(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete status");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <AppShell>
       <aside className="flex w-[400px] shrink-0 flex-col border-r border-wa-border bg-wa-panel">
@@ -109,7 +135,12 @@ function StoriesPage() {
           }}
         />
         {mine.map((story) => (
-          <StoryCard key={story.id} story={story} onClick={() => void openStory(story)} />
+          <StoryCard
+            key={story.id}
+            story={story}
+            onClick={() => void openStory(story)}
+            onDelete={() => setDeleteCandidate(story)}
+          />
         ))}
         <p className="px-4 py-2 text-xs uppercase tracking-wider text-wa-muted">
           Recent updates
@@ -150,10 +181,56 @@ function StoriesPage() {
       <StoryViewer
         story={active}
         onClose={() => setActive(null)}
+        allowHighlight={active?.senderId === user.id}
         onAddHighlight={async (story, title) => {
           await api.addHighlight(user.id, story.id, title);
         }}
       />
+      {deleteCandidate ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4"
+          role="presentation"
+          onClick={() => {
+            if (!deleting) setDeleteCandidate(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-status-title"
+            className="w-full max-w-sm rounded-lg bg-wa-panel p-6 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="delete-status-title" className="text-lg font-semibold text-wa-text">
+              Delete this status?
+            </h2>
+            <p className="mt-2 text-sm text-wa-muted">
+              This status will be removed for everyone.
+            </p>
+            {error ? (
+              <p className="mt-3 text-sm text-wa-danger">{error}</p>
+            ) : null}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setDeleteCandidate(null)}
+                className="rounded px-4 py-2 text-sm text-wa-text hover:bg-wa-hover disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => void deleteStory()}
+                className="rounded bg-wa-danger px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

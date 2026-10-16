@@ -46,6 +46,17 @@ const upload = multer({
   },
 });
 
+const chatAttachmentUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => {
+      const safe = file.originalname.replace(/[^a-zA-Z0-9.\-]/g, "_");
+      cb(null, `${uid()}-${safe}`);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
+
 const users = [];
 const chats = [];
 const messages = [];
@@ -131,10 +142,21 @@ function ensureChat(senderId, receiverId) {
   return chat;
 }
 
-function createMessage({ senderId, receiverId, text, scheduled = false }) {
+function createMessage({
+  senderId,
+  receiverId,
+  text,
+  scheduled = false,
+  sharedContactId,
+  attachment,
+}) {
   const sender = findUserById(senderId);
   const receiver = findUserById(receiverId);
   if (!sender || !receiver) return null;
+  const sharedContact = sharedContactId
+    ? findUserById(sharedContactId)
+    : null;
+  if (sharedContactId && !sharedContact) return null;
   const trimmed = String(text || "").trim();
   if (!trimmed) return null;
 
@@ -148,6 +170,16 @@ function createMessage({ senderId, receiverId, text, scheduled = false }) {
     text: trimmed,
     time: Date.now(),
     scheduled: Boolean(scheduled),
+    ...(sharedContact
+      ? {
+          sharedContact: {
+            id: sharedContact.id,
+            username: sharedContact.username,
+            about: sharedContact.about,
+          },
+        }
+      : {}),
+    ...(attachment ? { attachment } : {}),
   };
   messages.push(message);
   ensureChat(sender.id, receiver.id);
@@ -156,6 +188,11 @@ function createMessage({ senderId, receiverId, text, scheduled = false }) {
 }
 
 function ensureBirthdayReminders() {
+  const now = new Date();
+  const reminderTime = new Date(now);
+  reminderTime.setHours(15, 0, 0, 0);
+  if (now < reminderTime) return [];
+
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const created = [];
@@ -166,12 +203,13 @@ function ensureBirthdayReminders() {
 
     users.forEach((viewer) => {
       if (viewer.id === person.id) return;
+      if (viewer.birthdayRemindersEnabled === false) return;
       const already = notifications.find(
         (entry) =>
           entry.type === "birthday" &&
           entry.userId === viewer.id &&
           entry.aboutUserId === person.id &&
-          isSameMonthDay(entry.createdAt, Date.now()),
+          isSameMonthDay(entry.createdAt, now.getTime()),
       );
       if (already) return;
 
@@ -181,7 +219,7 @@ function ensureBirthdayReminders() {
         aboutUserId: person.id,
         text: `${person.username}'s birthday is tomorrow.`,
         type: "birthday",
-        createdAt: Date.now(),
+        createdAt: now.getTime(),
         read: false,
       };
       notifications.push(notification);
@@ -229,6 +267,9 @@ app.post("/api/register", (req, res) => {
     password: String(password),
     birthday: birthday || "",
     about: "Hey there! I am using WhatsApp.",
+    messageNotifications: true,
+    birthdayRemindersEnabled: true,
+    invisibleDeleteEnabled: true,
     online: false,
     socketId: null,
   };
@@ -271,6 +312,22 @@ app.patch("/api/users/:id", (req, res) => {
   if (!user) return res.status(404).json({ error: "User not found" });
   if (typeof req.body?.birthday === "string") user.birthday = req.body.birthday;
   if (typeof req.body?.about === "string") user.about = req.body.about;
+  for (const setting of [
+    "messageNotifications",
+    "birthdayRemindersEnabled",
+    "invisibleDeleteEnabled",
+  ]) {
+    if (typeof req.body?.[setting] === "boolean") {
+      user[setting] = req.body[setting];
+      if (setting === "birthdayRemindersEnabled" && !req.body[setting]) {
+        notifications.forEach((entry) => {
+          if (entry.userId === user.id && entry.type === "birthday") {
+            entry.read = true;
+          }
+        });
+      }
+    }
+  }
   ensureBirthdayReminders();
   io.emit("users-updated", publicUsers());
   res.json(publicUser(user));
@@ -293,6 +350,7 @@ app.post("/api/message", (req, res) => {
     senderId: req.body?.senderId,
     receiverId: req.body?.receiverId,
     text: req.body?.text,
+    sharedContactId: req.body?.sharedContactId,
   });
   if (!message) {
     return res.status(400).json({ error: "Unable to send message" });
@@ -300,9 +358,44 @@ app.post("/api/message", (req, res) => {
   res.json(message);
 });
 
+app.post(
+  "/api/chat-attachment",
+  chatAttachmentUpload.single("file"),
+  (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "File is required" });
+    const message = createMessage({
+      senderId: req.body?.senderId,
+      receiverId: req.body?.receiverId,
+      text: req.file.originalname,
+      attachment: {
+        name: req.file.originalname,
+        url: `/uploads/chats/${req.file.filename}`,
+        mimeType: req.file.mimetype || "application/octet-stream",
+        size: req.file.size,
+      },
+    });
+    if (!message) {
+      fs.unlink(req.file.path, (error) => {
+        if (error) console.error("Could not remove rejected chat attachment", error);
+      });
+      return res.status(400).json({ error: "Invalid sender, recipient, or file" });
+    }
+    res.json(message);
+  },
+);
+
 app.delete("/api/message/:id", (req, res) => {
+  const user = findUserById(req.body?.userId);
+  if (!user) return res.status(400).json({ error: "Invalid user" });
+  if (user.invisibleDeleteEnabled === false) {
+    return res.status(403).json({ error: "Delete-for-everyone is disabled in Privacy settings" });
+  }
   const index = messages.findIndex((entry) => entry.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: "Message not found" });
+  const message = messages[index];
+  if (message.senderId !== user.id && message.receiverId !== user.id) {
+    return res.status(403).json({ error: "You cannot delete this message" });
+  }
   const [removed] = messages.splice(index, 1);
   emitToChat(removed.senderId, removed.receiverId, "message-deleted", {
     id: removed.id,
@@ -364,8 +457,15 @@ app.post("/api/story/:id/view", (req, res) => {
 });
 
 app.delete("/api/story/:id", (req, res) => {
-  const index = stories.findIndex((entry) => entry.id === req.params.id);
-  if (index >= 0) stories.splice(index, 1);
+  const story = stories.find((entry) => entry.id === req.params.id);
+  if (!story) return res.status(404).json({ error: "Story not found" });
+  const userId = String(req.body?.userId || "");
+  if (story.senderId !== userId) {
+    return res.status(403).json({ error: "Only the story owner can delete it" });
+  }
+  const index = stories.indexOf(story);
+  stories.splice(index, 1);
+  io.emit("story-deleted", { id: story.id });
   res.json({ success: true });
 });
 
@@ -374,13 +474,28 @@ app.post("/api/highlight", (req, res) => {
   const story = stories.find((entry) => entry.id === req.body?.storyId);
   if (!user) return res.status(400).json({ error: "Invalid user" });
   if (!story) return res.status(400).json({ error: "Story not found" });
+  if (story.senderId !== user.id) {
+    return res.status(403).json({ error: "Only the story owner can add it to highlights" });
+  }
+
   const title = String(req.body?.title || "Memories").trim() || "Memories";
+  const savedByUserId = user.id;
+  const existing = highlights.find(
+    (entry) =>
+      (entry.savedByUserId ?? entry.userId) === savedByUserId &&
+      entry.storyId === story.id,
+  );
+  if (existing) return res.json(existing);
+
   const highlight = {
     id: uid(),
     user: user.username,
-    userId: user.id,
+    userId: savedByUserId,
+    savedByUserId,
     story: story.id,
     storyId: story.id,
+    storyOwnerId: story.senderId,
+    storyOwner: story.sender,
     title,
     image: story.image,
     sender: story.sender,
@@ -394,7 +509,9 @@ app.post("/api/highlight", (req, res) => {
 app.get("/api/highlights", (req, res) => {
   const userId = String(req.query.userId || "");
   if (!userId) return res.json(highlights);
-  res.json(highlights.filter((entry) => entry.userId === userId));
+  res.json(
+    highlights.filter((entry) => (entry.savedByUserId ?? entry.userId) === userId),
+  );
 });
 
 app.delete("/api/highlight/:id", (req, res) => {

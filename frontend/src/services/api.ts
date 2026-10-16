@@ -49,13 +49,28 @@ export const api = {
     }),
   messages: (userId: string) =>
     request<Message[]>(`/messages?userId=${encodeURIComponent(userId)}`),
-  sendMessage: (senderId: string, receiverId: string, text: string) =>
+  sendMessage: (
+    senderId: string,
+    receiverId: string,
+    text: string,
+    sharedContactId?: string,
+  ) =>
     request<Message>("/message", {
       method: "POST",
-      body: JSON.stringify({ senderId, receiverId, text }),
+      body: JSON.stringify({ senderId, receiverId, text, sharedContactId }),
     }),
-  deleteMessage: (id: string) =>
-    request(`/message/${id}`, { method: "DELETE" }),
+  sendAttachment: (senderId: string, receiverId: string, file: File) => {
+    const body = new FormData();
+    body.append("senderId", senderId);
+    body.append("receiverId", receiverId);
+    body.append("file", file);
+    return request<Message>("/chat-attachment", { method: "POST", body });
+  },
+  deleteMessage: (id: string, userId: string) =>
+    request(`/message/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ userId }),
+    }),
   stories: (userId: string) =>
     request<Story[]>(`/stories?userId=${encodeURIComponent(userId)}`),
   uploadStory: (senderId: string, file: File) => {
@@ -67,6 +82,11 @@ export const api = {
   viewStory: (id: string, userId: string) =>
     request<Story>(`/story/${id}/view`, {
       method: "POST",
+      body: JSON.stringify({ userId }),
+    }),
+  deleteStory: (id: string, userId: string) =>
+    request<{ success: boolean }>(`/story/${id}`, {
+      method: "DELETE",
       body: JSON.stringify({ userId }),
     }),
   highlights: (userId: string) =>

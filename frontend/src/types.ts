@@ -4,6 +4,9 @@ export type User = {
   birthday?: string;
   about?: string;
   online?: boolean;
+  messageNotifications?: boolean;
+  birthdayRemindersEnabled?: boolean;
+  invisibleDeleteEnabled?: boolean;
 };
 
 export type Message = {
@@ -16,6 +19,17 @@ export type Message = {
   text: string;
   time: number;
   scheduled?: boolean;
+  sharedContact?: {
+    id: string;
+    username: string;
+    about?: string;
+  };
+  attachment?: {
+    name: string;
+    url: string;
+    mimeType: string;
+    size: number;
+  };
 };
 
 export type Story = {
@@ -34,8 +48,11 @@ export type Highlight = {
   id: string;
   user: string;
   userId: string;
+  savedByUserId?: string;
   story: string;
   storyId: string;
+  storyOwnerId?: string;
+  storyOwner?: string;
   title: string;
   image: string;
   sender: string;

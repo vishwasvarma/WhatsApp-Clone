@@ -14,7 +14,7 @@ import {
   logoutCurrentUser,
   setCurrentUser,
 } from "../auth/auth";
-import type { NotificationItem, User } from "../types";
+import type { Message, NotificationItem, User } from "../types";
 
 type AppContextValue = {
   user: User | null;
@@ -74,19 +74,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setNotifications((prev) =>
         prev.some((entry) => entry.id === item.id) ? prev : [item, ...prev],
       );
+      if (
+        user.birthdayRemindersEnabled !== false &&
+        document.hidden &&
+        "Notification" in window &&
+        Notification.permission === "granted"
+      ) {
+        try {
+          const notification = new Notification("Birthday reminder", {
+            body: item.text,
+            icon: "/assets/icons/whatsapp.svg",
+          });
+          notification.onclick = () => window.focus();
+        } catch (error) {
+          console.error("Could not display birthday reminder notification", error);
+        }
+      }
+    };
+    const onMessage = (message: Message) => {
+      if (
+        !user ||
+        message.senderId === user.id ||
+        user.messageNotifications === false ||
+        !document.hidden ||
+        !("Notification" in window) ||
+        Notification.permission !== "granted"
+      ) {
+        return;
+      }
+      try {
+        const notification = new Notification(message.sender, {
+          body: message.text,
+          icon: "/assets/icons/whatsapp.svg",
+        });
+        notification.onclick = () => window.focus();
+      } catch (error) {
+        console.error("Could not display message notification", error);
+      }
     };
     socket.on("users-updated", onUsers);
     socket.on("birthday-notification", onBirthday);
+    socket.on("receive-message", onMessage);
     const onConnect = () => {
-      if (user) socket.emit("identify", { userId: user.id });
+      if (!user) return;
+      socket.emit("identify", { userId: user.id });
+      void refreshUsers();
+      void refreshNotifications();
     };
     socket.on("connect", onConnect);
     return () => {
       socket.off("users-updated", onUsers);
       socket.off("birthday-notification", onBirthday);
+      socket.off("receive-message", onMessage);
       socket.off("connect", onConnect);
     };
-  }, [user]);
+  }, [user, refreshUsers, refreshNotifications]);
 
   const login = useCallback(async (username: string, password: string) => {
     const res = await api.login(username, password);
@@ -127,6 +169,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const next = await api.updateUser(user.id, body);
       setCurrentUser(next);
       setUser(next);
+      if (body.birthdayRemindersEnabled === false) {
+        setNotifications((prev) =>
+          prev.map((item) =>
+            item.type === "birthday" ? { ...item, read: true } : item,
+          ),
+        );
+      }
     },
     [user],
   );

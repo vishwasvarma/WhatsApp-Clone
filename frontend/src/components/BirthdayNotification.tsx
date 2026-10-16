@@ -10,11 +10,11 @@ function BirthdayNotification({ items, onDismiss }: Props) {
   const visible = items.filter((item) => item.type === "birthday" && !item.read);
   if (visible.length === 0) return null;
   return (
-    <div className="space-y-2 px-4 pt-3">
+    <div className="pointer-events-none fixed right-4 top-4 z-50 w-[min(24rem,calc(100vw-2rem))] space-y-2">
       {visible.map((item) => (
         <div
           key={item.id}
-          className="flex items-start gap-3 rounded-lg bg-[#182229] px-3 py-2 text-sm text-wa-text shadow"
+          className="pointer-events-auto flex items-start gap-3 rounded-lg bg-[#182229] px-3 py-2 text-sm text-wa-text shadow"
         >
           <MdCake className="mt-0.5 text-wa-accent" size={18} />
           <div className="flex-1">

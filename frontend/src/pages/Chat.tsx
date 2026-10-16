@@ -6,7 +6,6 @@ import MessageBubble from "../components/MessageBubble";
 import MessageInput from "../components/MessageInput";
 import DeleteConfirm from "../components/DeleteConfirm";
 import ScheduleModal from "../components/ScheduleModal";
-import BirthdayNotification from "../components/BirthdayNotification";
 import Avatar from "../components/Avatar";
 import { useApp } from "../context/AppContext";
 import { api } from "../services/api";
@@ -14,7 +13,7 @@ import socket from "../socket/socket";
 import type { Message, ScheduledMessage, User } from "../types";
 
 function ChatPage() {
-  const { user, users, notifications, markNotificationRead } = useApp();
+  const { user, users } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [scheduled, setScheduled] = useState<ScheduledMessage[]>([]);
   const [selected, setSelected] = useState<User | null>(null);
@@ -63,7 +62,15 @@ function ChatPage() {
 
   useEffect(() => {
     if (!user) return;
-    void api.messages(user.id).then(setMessages);
+    void api.messages(user.id).then((loaded) => {
+      setMessages((current) => {
+        const loadedIds = new Set(loaded.map((message) => message.id));
+        return [
+          ...loaded,
+          ...current.filter((message) => !loadedIds.has(message.id)),
+        ];
+      });
+    });
     void api.schedules(user.id).then(setScheduled);
   }, [user]);
 
@@ -159,8 +166,12 @@ function ChatPage() {
     if (!deleteId) return;
     const id = deleteId;
     setDeleteId(null);
-    setMessages((prev) => prev.filter((item) => item.id !== id));
-    await api.deleteMessage(id);
+    try {
+      await api.deleteMessage(id, user.id);
+      setMessages((prev) => prev.filter((item) => item.id !== id));
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not delete message");
+    }
   };
 
   const pendingForChat = scheduled.filter(
@@ -213,10 +224,6 @@ function ChatPage() {
               </div>
             </header>
             <div className="wa-wallpaper flex min-h-0 flex-1 flex-col">
-              <BirthdayNotification
-                items={notifications}
-                onDismiss={(id) => void markNotificationRead(id)}
-              />
               {pendingForChat.length > 0 ? (
                 <div className="px-4 pt-3">
                   <div className="rounded-lg bg-[#182229] px-3 py-2 text-xs text-wa-muted">
@@ -242,7 +249,11 @@ function ChatPage() {
                     key={message.id}
                     message={message}
                     mine={message.senderId === user.id}
-                    onDelete={setDeleteId}
+                    onDelete={
+                      user.invisibleDeleteEnabled === false
+                        ? undefined
+                        : setDeleteId
+                    }
                   />
                 ))}
                 </div>
@@ -254,6 +265,42 @@ function ChatPage() {
               onSend={() => void sendMessage()}
               onSchedule={() => setScheduleOpen(true)}
               onTyping={emitTyping}
+              contacts={contacts}
+              onFileSelected={async (file) => {
+                try {
+                  const message = await api.sendAttachment(
+                    user.id,
+                    selected.id,
+                    file,
+                  );
+                  setMessages((current) =>
+                    current.some((item) => item.id === message.id)
+                      ? current
+                      : [...current, message],
+                  );
+                  setToast(`${file.name} sent`);
+                  window.setTimeout(() => setToast(""), 2500);
+                } catch (err) {
+                  setToast(
+                    err instanceof Error
+                      ? err.message
+                      : "Could not send attachment",
+                  );
+                }
+              }}
+              onShareContact={async (contact) => {
+                const message = await api.sendMessage(
+                  user.id,
+                  selected.id,
+                  "Shared a contact",
+                  contact.id,
+                );
+                setMessages((current) =>
+                  current.some((item) => item.id === message.id)
+                    ? current
+                    : [...current, message],
+                );
+              }}
             />
           </>
         )}

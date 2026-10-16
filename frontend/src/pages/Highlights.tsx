@@ -47,7 +47,7 @@ function HighlightsPage() {
                 setActive({
                   id: item.id,
                   sender: item.sender,
-                  senderId: item.userId,
+                  senderId: item.storyOwnerId ?? item.userId,
                   image: item.image,
                   createdAt: item.createdAt,
                   viewedBy: [],

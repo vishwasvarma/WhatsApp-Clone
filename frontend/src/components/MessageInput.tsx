@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import {
   MdAttachFile,
   MdInsertEmoticon,
@@ -10,6 +10,8 @@ import {
   MdCameraAlt,
   MdPerson,
 } from "react-icons/md";
+import Avatar from "./Avatar";
+import type { User } from "../types";
 
 const EMOJIS = ["😀", "😂", "❤️", "👍", "🎉", "🔥", "🎂", "👋", "🙏", "😊", "😍", "😎"];
 
@@ -19,35 +21,102 @@ type Props = {
   onSend: () => void;
   onSchedule: () => void;
   onTyping: (typing: boolean) => void;
+  contacts: User[];
+  onShareContact: (contact: User) => Promise<void>;
+  onFileSelected: (file: File) => Promise<void>;
 };
 
-function MessageInput({ value, onChange, onSend, onSchedule, onTyping }: Props) {
+function MessageInput({
+  value,
+  onChange,
+  onSend,
+  onSchedule,
+  onTyping,
+  contacts,
+  onShareContact,
+  onFileSelected,
+}: Props) {
   const [attach, setAttach] = useState(false);
   const [emoji, setEmoji] = useState(false);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [contactError, setContactError] = useState("");
+  const documentInput = useRef<HTMLInputElement | null>(null);
+  const mediaInput = useRef<HTMLInputElement | null>(null);
+  const cameraInput = useRef<HTMLInputElement | null>(null);
+
+  const handleFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    setAttach(false);
+    if (file) await onFileSelected(file);
+    event.target.value = "";
+  };
 
   return (
     <div className="relative bg-wa-header px-2 py-2">
+      <input
+        ref={documentInput}
+        type="file"
+        className="hidden"
+        onChange={(event) => void handleFileChange(event)}
+      />
+      <input
+        ref={mediaInput}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={(event) => void handleFileChange(event)}
+      />
+      <input
+        ref={cameraInput}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => void handleFileChange(event)}
+      />
       {attach ? (
         <div className="absolute bottom-16 left-4 z-20 w-56 rounded-xl bg-[#233138] p-3 shadow-2xl">
-          <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-wa-text hover:bg-wa-hover">
+          <button
+            type="button"
+            onClick={() => documentInput.current?.click()}
+            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-wa-text hover:bg-wa-hover"
+          >
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#7f66ff] text-white">
               <MdInsertDriveFile />
             </span>
             Document
           </button>
-          <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-wa-text hover:bg-wa-hover">
+          <button
+            type="button"
+            onClick={() => mediaInput.current?.click()}
+            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-wa-text hover:bg-wa-hover"
+          >
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#007bfc] text-white">
               <MdPhoto />
             </span>
             Photos & videos
           </button>
-          <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-wa-text hover:bg-wa-hover">
+          <button
+            type="button"
+            onClick={() => cameraInput.current?.click()}
+            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-wa-text hover:bg-wa-hover"
+          >
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#ff2e74] text-white">
               <MdCameraAlt />
             </span>
             Camera
           </button>
-          <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-wa-text hover:bg-wa-hover">
+          <button
+            type="button"
+            onClick={() => {
+              setAttach(false);
+              setContactError("");
+              setContactPickerOpen(true);
+            }}
+            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm text-wa-text hover:bg-wa-hover"
+          >
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#009de2] text-white">
               <MdPerson />
             </span>
@@ -78,6 +147,82 @@ function MessageInput({ value, onChange, onSend, onSchedule, onTyping }: Props) 
               {item}
             </button>
           ))}
+        </div>
+      ) : null}
+      {contactPickerOpen ? (
+        <div
+          className="fixed inset-0 z-40 grid place-items-center bg-black/60 px-4"
+          role="presentation"
+          onClick={() => setContactPickerOpen(false)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-contact-title"
+            className="max-h-[min(80vh,36rem)] w-full max-w-sm overflow-hidden rounded-xl bg-wa-panel shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-wa-border px-4 py-3">
+              <h2 id="share-contact-title" className="font-medium text-wa-text">
+                Share a contact
+              </h2>
+              <p className="mt-1 text-sm text-wa-muted">
+                Choose an account to share in this chat.
+              </p>
+            </div>
+            <div className="max-h-80 overflow-y-auto p-2">
+              {contacts.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-wa-muted">
+                  No other contacts are available.
+                </p>
+              ) : (
+                contacts.map((contact) => (
+                  <button
+                    key={contact.id}
+                    type="button"
+                    onClick={async () => {
+                      setContactError("");
+                      try {
+                        await onShareContact(contact);
+                        setContactPickerOpen(false);
+                      } catch (error) {
+                        setContactError(
+                          error instanceof Error
+                            ? error.message
+                            : "Could not share contact",
+                        );
+                      }
+                    }}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-wa-hover"
+                  >
+                    <Avatar name={contact.username} size={40} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-wa-text">
+                        {contact.username}
+                      </span>
+                      <span className="block truncate text-xs text-wa-muted">
+                        {contact.about || "Hey there! I am using WhatsApp."}
+                      </span>
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+            {contactError ? (
+              <p role="alert" className="px-4 pb-2 text-sm text-wa-danger">
+                {contactError}
+              </p>
+            ) : null}
+            <div className="flex justify-end border-t border-wa-border p-3">
+              <button
+                type="button"
+                onClick={() => setContactPickerOpen(false)}
+                className="rounded px-4 py-2 text-sm text-wa-muted hover:bg-wa-hover"
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
         </div>
       ) : null}
       <div className="flex items-end gap-1">

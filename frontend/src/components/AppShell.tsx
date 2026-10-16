@@ -9,6 +9,7 @@ import {
 } from "react-icons/md";
 import { useApp } from "../context/AppContext";
 import Avatar from "./Avatar";
+import BirthdayNotification from "./BirthdayNotification";
 
 const items = [
   { to: "/chat", icon: MdChat, label: "Chats" },
@@ -17,7 +18,7 @@ const items = [
 ];
 
 function AppShell({ children }: { children: ReactNode }) {
-  const { user, logout } = useApp();
+  const { user, notifications, markNotificationRead, logout } = useApp();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -72,6 +73,12 @@ function AppShell({ children }: { children: ReactNode }) {
         </div>
       </nav>
       {children}
+      {user?.birthdayRemindersEnabled === false ? null : (
+        <BirthdayNotification
+          items={notifications}
+          onDismiss={(id) => void markNotificationRead(id)}
+        />
+      )}
     </div>
   );
 }
